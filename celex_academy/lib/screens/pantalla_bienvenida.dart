@@ -40,7 +40,6 @@ class PantallaBienvenida extends StatelessWidget {
 
                   // Si no se encuentra el logo, mostramos un icono.
                   errorBuilder: (context, error, stackTrace) {
-                    print('ERROR AL CARGAR LOGO: $error');
 
                     return Container(
                       width: 180,

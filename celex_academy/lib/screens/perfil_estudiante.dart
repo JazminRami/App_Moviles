@@ -1,22 +1,111 @@
 
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 // Colores principales de CELEX Academy.
 const Color azulPerfil = Color(0xFF023C87);
 const Color fondoPerfil = Color(0xFFEAF1FB);
 
-class PerfilEstudiante extends StatelessWidget {
+// Pantalla del perfil del estudiante.
+class PerfilEstudiante extends StatefulWidget {
   const PerfilEstudiante({super.key});
 
-  // Datos ficticios del estudiante.
-  // Después se obtendrán de la base de datos.
-  final String nombre = 'Nombre del estudiante';
-  final String correo = 'estudiante@ejemplo.com';
-  final String categoria = 'Comunidad IPN';
-  final String estadoVerificacion = 'Pendiente de verificar';
-
   @override
-  Widget build(BuildContext context) {
+  State<PerfilEstudiante> createState() => _PerfilEstudianteState();
+}
+
+class _PerfilEstudianteState extends State<PerfilEstudiante> {
+
+  // Consulta para obtener los datos del estudiante.
+  Future<Map<String, dynamic>?> obtenerPerfil() async {
+    final usuario = Supabase.instance.client.auth.currentUser;
+
+    if (usuario == null) {
+      return null;
+    }
+
+    final respuesta = await Supabase.instance.client
+        .from('perfiles_estudiantes')
+        .select(
+          'nombre_completo, correo, categoria, estado_verificacion_ipn',
+        )
+        .eq('id', usuario.id)
+        .maybeSingle();
+
+    return respuesta;
+  }
+
+  // Muestra una confirmación antes de cerrar sesión.
+  Future<void> confirmarCerrarSesion() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Cerrar sesión'),
+          content: const Text(
+            '¿Estás seguro de que deseas cerrar tu sesión?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, false);
+              },
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text('Cerrar sesión'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmar == true) {
+      await cerrarSesion();
+    }
+  }
+
+  // Cierra la sesión de Supabase y regresa a la pantalla inicial.
+  Future<void> cerrarSesion() async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+
+      if (!mounted) return;
+
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/',
+        (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se pudo cerrar la sesión. Intenta nuevamente.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Construye la pantalla con los datos obtenidos.
+  Widget construirPerfil(
+    String nombre,
+    String correo,
+    String categoria,
+    String estadoVerificacion,
+    bool mostrarVerificacion,
+  ) {
     return Scaffold(
       backgroundColor: fondoPerfil,
 
@@ -56,7 +145,7 @@ class PerfilEstudiante extends StatelessWidget {
 
             const SizedBox(height: 15),
 
-            // Nombre del estudiante.
+            // Nombre obtenido de Supabase.
             Text(
               nombre,
               style: const TextStyle(
@@ -69,6 +158,7 @@ class PerfilEstudiante extends StatelessWidget {
 
             const SizedBox(height: 5),
 
+            // Correo obtenido de Supabase.
             Text(
               correo,
               style: const TextStyle(
@@ -106,16 +196,19 @@ class PerfilEstudiante extends StatelessWidget {
                   etiqueta: 'Categoría',
                   valor: categoria,
                 ),
-                _DatoPerfil(
-                  etiqueta: 'Verificación IPN',
-                  valor: estadoVerificacion,
-                ),
+
+                // Solo se muestra para Comunidad IPN.
+                if (mostrarVerificacion)
+                  _DatoPerfil(
+                    etiqueta: 'Verificación IPN',
+                    valor: estadoVerificacion,
+                  ),
               ],
             ),
 
             const SizedBox(height: 18),
 
-            // Información sobre las categorías.
+            // Información según la categoría del estudiante.
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -126,22 +219,25 @@ class PerfilEstudiante extends StatelessWidget {
                   color: const Color(0xFFD2E0F5),
                 ),
               ),
-              child: const Row(
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.info_outline,
                     color: azulPerfil,
                     size: 26,
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'La categoría del estudiante determina '
-                      'la tarifa que corresponde pagar por '
-                      'los cursos. La comunidad IPN debe '
-                      'verificar su condición.',
-                      style: TextStyle(
+                      mostrarVerificacion
+                          ? 'La categoría Comunidad IPN requiere '
+                              'verificar la pertenencia a la comunidad '
+                              'del Instituto Politécnico Nacional.'
+                          : 'La categoría del estudiante determina '
+                              'la tarifa que corresponde pagar por '
+                              'los cursos.',
+                      style: const TextStyle(
                         fontSize: 14,
                         height: 1.5,
                       ),
@@ -151,10 +247,36 @@ class PerfilEstudiante extends StatelessWidget {
               ),
             ),
 
+            const SizedBox(height: 30),
+
+            // Botón para cerrar sesión.
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton.icon(
+                onPressed: confirmarCerrarSesion,
+                icon: const Icon(Icons.logout),
+                label: const Text(
+                  'Cerrar sesión',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+
             const SizedBox(height: 25),
 
             const Text(
-              'CELEX Academy · Datos de demostración',
+              'CELEX Academy',
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.black54,
@@ -163,6 +285,82 @@ class PerfilEstudiante extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: obtenerPerfil(),
+      builder: (context, snapshot) {
+
+        // Mientras se consultan los datos.
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(
+                color: azulPerfil,
+              ),
+            ),
+          );
+        }
+
+        // Si ocurrió un error al consultar Supabase.
+        if (snapshot.hasError) {
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('Mi perfil'),
+              backgroundColor: azulPerfil,
+              foregroundColor: Colors.white,
+            ),
+            body: const Center(
+              child: Text(
+                'No se pudieron cargar los datos del perfil.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
+
+        // Si no existe un perfil.
+        if (snapshot.data == null) {
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('Mi perfil'),
+              backgroundColor: azulPerfil,
+              foregroundColor: Colors.white,
+            ),
+            body: const Center(
+              child: Text(
+                'No se encontró el perfil del estudiante.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
+
+        // Obtenemos los datos de la consulta.
+        final datos = snapshot.data!;
+
+        final nombre = datos['nombre_completo'] ?? 'Sin nombre';
+        final correo = datos['correo'] ?? 'Sin correo';
+        final categoria = datos['categoria'] ?? 'Por determinar';
+
+        final estadoVerificacion =
+            datos['estado_verificacion_ipn'] ?? 'Pendiente';
+
+        // Determinar si se debe mostrar la verificación IPN.
+        final mostrarVerificacion = categoria == 'Comunidad IPN';
+
+        // Mostramos el perfil con los datos reales.
+        return construirPerfil(
+          nombre,
+          correo,
+          categoria,
+          estadoVerificacion,
+          mostrarVerificacion,
+        );
+      },
     );
   }
 }

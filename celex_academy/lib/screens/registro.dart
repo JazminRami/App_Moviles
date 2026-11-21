@@ -1,8 +1,10 @@
 
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 // Color institucional.
 const Color azulRegistro = Color(0xFF023C87);
+const Color fondoRegistro = Color(0xFFEAF1FB);
 
 // Pantalla para crear una cuenta.
 class Registro extends StatefulWidget {
@@ -13,29 +15,103 @@ class Registro extends StatefulWidget {
 }
 
 class _RegistroState extends State<Registro> {
-  // Controladores de los campos del formulario.
-  final TextEditingController nombreController =
-      TextEditingController();
+  // Controladores de los campos.
+  final nombreController = TextEditingController();
+  final correoController = TextEditingController();
+  final contrasenaController = TextEditingController();
+  final confirmarContrasenaController = TextEditingController();
 
-  final TextEditingController correoController =
-      TextEditingController();
+  // Categoría seleccionada.
+  String? categoriaSeleccionada;
 
-  final TextEditingController contrasenaController =
-      TextEditingController();
-
-  final TextEditingController confirmarContrasenaController =
-      TextEditingController();
-
-  // Clave para validar el formulario.
-  final GlobalKey<FormState> formularioKey = GlobalKey<FormState>();
-
-  // Permiten mostrar u ocultar las contraseñas.
+  // Control de visibilidad de contraseñas.
   bool mostrarContrasena = false;
   bool mostrarConfirmacion = false;
 
+  // Control de carga.
+  bool cargando = false;
+
+  // Registrar estudiante en Supabase.
+  Future<void> registrarEstudiante() async {
+    final nombre = nombreController.text.trim();
+    final correo = correoController.text.trim();
+    final contrasena = contrasenaController.text;
+    final confirmar = confirmarContrasenaController.text;
+
+    // Validar campos vacíos.
+    if (nombre.isEmpty ||
+        correo.isEmpty ||
+        contrasena.isEmpty ||
+        confirmar.isEmpty ||
+        categoriaSeleccionada == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Completa todos los campos.'),
+        ),
+      );
+      return;
+    }
+
+    // Validar que las contraseñas coincidan.
+    if (contrasena != confirmar) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Las contraseñas no coinciden.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      cargando = true;
+    });
+
+    try {
+      // Crear cuenta y enviar los datos al perfil automático.
+      final respuesta = await Supabase.instance.client.auth.signUp(
+        email: correo,
+        password: contrasena,
+        emailRedirectTo: 'celexacademy://login-callback',
+        data: {
+          'nombre_completo': nombre,
+          'categoria': categoriaSeleccionada,
+        },
+      );
+
+      if (!mounted) return;
+
+      if (respuesta.user != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cuenta creada correctamente.'),
+          ),
+        );
+
+        Navigator.pop(context);
+      }
+    } on AuthException catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al registrar: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          cargando = false;
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
-    // Liberamos los controladores al cerrar la pantalla.
     nombreController.dispose();
     correoController.dispose();
     contrasenaController.dispose();
@@ -46,260 +122,170 @@ class _RegistroState extends State<Registro> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: fondoRegistro,
       appBar: AppBar(
-        title: const Text('Crear cuenta'),
-        backgroundColor: Colors.white,
-        foregroundColor: azulRegistro,
-        elevation: 0,
+        title: const Text(
+          'Crear cuenta',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: azulRegistro,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 15),
 
-      body: SafeArea(
-        child: Form(
-          key: formularioKey,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 12),
+            const Text(
+              '¡Bienvenido a CELEX Academy!',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: azulRegistro,
+              ),
+            ),
 
-                // Icono provisional.
-                const Icon(
-                  Icons.person_add_alt_1_rounded,
-                  color: azulRegistro,
-                  size: 70,
+            const SizedBox(height: 25),
+
+            // Nombre completo.
+            TextField(
+              controller: nombreController,
+              decoration: const InputDecoration(
+                labelText: 'Nombre completo',
+                prefixIcon: Icon(Icons.person_outline),
+                border: OutlineInputBorder(),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Correo electrónico.
+            TextField(
+              controller: correoController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Correo electrónico',
+                prefixIcon: Icon(Icons.email_outlined),
+                border: OutlineInputBorder(),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Categoría del estudiante.
+            DropdownButtonFormField<String>(
+              initialValue: categoriaSeleccionada,
+              decoration: const InputDecoration(
+                labelText: 'Categoría del estudiante',
+                prefixIcon: Icon(Icons.school_outlined),
+                border: OutlineInputBorder(),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'Comunidad IPN',
+                  child: Text('Comunidad IPN'),
                 ),
+                DropdownMenuItem(
+                  value: 'Público general',
+                  child: Text('Público general'),
+                ),
+              ],
+              onChanged: (valor) {
+                setState(() {
+                  categoriaSeleccionada = valor;
+                });
+              },
+            ),
 
-                const SizedBox(height: 18),
+            const SizedBox(height: 16),
 
-                const Text(
-                  'Únete a CELEX Academy',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 25,
-                    fontWeight: FontWeight.bold,
-                    color: azulRegistro,
+            // Contraseña.
+            TextField(
+              controller: contrasenaController,
+              obscureText: !mostrarContrasena,
+              decoration: InputDecoration(
+                labelText: 'Contraseña',
+                prefixIcon: const Icon(Icons.lock_outline),
+                border: const OutlineInputBorder(),
+                filled: true,
+                fillColor: Colors.white,
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    mostrarContrasena
+                        ? Icons.visibility_off
+                        : Icons.visibility,
                   ),
-                ),
-
-                const SizedBox(height: 10),
-
-                const Text(
-                  'Crea tu cuenta para comenzar.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.black54,
-                    fontSize: 15,
-                  ),
-                ),
-
-                const SizedBox(height: 30),
-
-                // Nombre completo.
-                const Text(
-                  'Nombre completo',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-
-                const SizedBox(height: 8),
-
-                TextFormField(
-                  controller: nombreController,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: InputDecoration(
-                    hintText: 'Escribe tu nombre completo',
-                    prefixIcon: const Icon(Icons.person_outline),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  validator: (valor) {
-                    if (valor == null || valor.trim().isEmpty) {
-                      return 'Escribe tu nombre completo.';
-                    }
-                    return null;
+                  onPressed: () {
+                    setState(() {
+                      mostrarContrasena = !mostrarContrasena;
+                    });
                   },
                 ),
+              ),
+            ),
 
-                const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
-                // Correo electrónico.
-                const Text(
-                  'Correo electrónico',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-
-                const SizedBox(height: 8),
-
-                TextFormField(
-                  controller: correoController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    hintText: 'ejemplo@correo.com',
-                    prefixIcon: const Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+            // Confirmar contraseña.
+            TextField(
+              controller: confirmarContrasenaController,
+              obscureText: !mostrarConfirmacion,
+              decoration: InputDecoration(
+                labelText: 'Confirmar contraseña',
+                prefixIcon: const Icon(Icons.lock_outline),
+                border: const OutlineInputBorder(),
+                filled: true,
+                fillColor: Colors.white,
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    mostrarConfirmacion
+                        ? Icons.visibility_off
+                        : Icons.visibility,
                   ),
-                  validator: (valor) {
-                    if (valor == null || valor.trim().isEmpty) {
-                      return 'Escribe tu correo electrónico.';
-                    }
-
-                    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+$')
-                        .hasMatch(valor.trim())) {
-                      return 'Escribe un correo válido.';
-                    }
-
-                    return null;
+                  onPressed: () {
+                    setState(() {
+                      mostrarConfirmacion = !mostrarConfirmacion;
+                    });
                   },
                 ),
+              ),
+            ),
 
-                const SizedBox(height: 20),
+            const SizedBox(height: 25),
 
-                // Crear contraseña.
-                const Text(
-                  'Contraseña',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-
-                const SizedBox(height: 8),
-
-                TextFormField(
-                  controller: contrasenaController,
-                  obscureText: !mostrarContrasena,
-                  decoration: InputDecoration(
-                    hintText: 'Crea una contraseña',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      onPressed: () {
-                        setState(() {
-                          mostrarContrasena = !mostrarContrasena;
-                        });
-                      },
-                      icon: Icon(
-                        mostrarContrasena
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                      ),
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  validator: (valor) {
-                    if (valor == null || valor.isEmpty) {
-                      return 'Crea una contraseña.';
-                    }
-
-                    if (valor.length < 8) {
-                      return 'Debe tener al menos 8 caracteres.';
-                    }
-
-                    return null;
-                  },
-                ),
-
-                const SizedBox(height: 20),
-
-                // Confirmar contraseña.
-                const Text(
-                  'Confirmar contraseña',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-
-                const SizedBox(height: 8),
-
-                TextFormField(
-                  controller: confirmarContrasenaController,
-                  obscureText: !mostrarConfirmacion,
-                  decoration: InputDecoration(
-                    hintText: 'Escribe nuevamente tu contraseña',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      onPressed: () {
-                        setState(() {
-                          mostrarConfirmacion = !mostrarConfirmacion;
-                        });
-                      },
-                      icon: Icon(
-                        mostrarConfirmacion
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                      ),
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  validator: (valor) {
-                    if (valor == null || valor.isEmpty) {
-                      return 'Confirma tu contraseña.';
-                    }
-
-                    if (valor != contrasenaController.text) {
-                      return 'Las contraseñas no coinciden.';
-                    }
-
-                    return null;
-                  },
-                ),
-
-                const SizedBox(height: 30),
-
-                // Botón para validar el registro.
-                SizedBox(
-                  height: 54,
-                  child: ElevatedButton(
-                    onPressed: crearCuenta,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: azulRegistro,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
+            // Botón para registrar.
+            ElevatedButton(
+              onPressed: cargando ? null : registrarEstudiante,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: azulRegistro,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+              ),
+              child: cargando
+                  ? const CircularProgressIndicator(
+                      color: Colors.white,
+                    )
+                  : const Text(
                       'Crear cuenta',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Regresa a la pantalla anterior.
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                  child: const Text(
-                    'Ya tengo una cuenta',
-                    style: TextStyle(color: azulRegistro),
-                  ),
-                ),
-              ],
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Valida los datos antes de continuar.
-  void crearCuenta() {
-    if (!formularioKey.currentState!.validate()) {
-      return;
-    }
-
-    // Por ahora solamente mostramos una confirmación.
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Datos correctos. El registro aún no está conectado.',
+          ],
         ),
       ),
     );

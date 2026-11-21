@@ -7,7 +7,17 @@ const Color fondoSolicitud = Color(0xFFEAF1FB);
 
 // Pantalla para solicitar un trámite.
 class NuevaSolicitud extends StatefulWidget {
-  const NuevaSolicitud({super.key});
+  // Datos que pueden recibirse desde la pantalla de idiomas.
+  final String? idiomaInicial;
+  final String? nivelInicial;
+  final String? tipoTramiteInicial;
+
+  const NuevaSolicitud({
+    super.key,
+    this.idiomaInicial,
+    this.nivelInicial,
+    this.tipoTramiteInicial,
+  });
 
   @override
   State<NuevaSolicitud> createState() => _NuevaSolicitudState();
@@ -22,14 +32,27 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
   String? idiomaSeleccionado;
   String? nivelSeleccionado;
 
-  // Niveles disponibles como ejemplos.
+  // Idiomas disponibles.
+  final List<String> idiomas = [
+    'Inglés',
+    'Francés',
+    'Alemán',
+    'Italiano',
+    'Japonés',
+  ];
+
+  // Niveles disponibles.
   final List<String> niveles = [
     'Básico 1',
     'Básico 2',
     'Básico 3',
+    'Básico 4',
+    'Básico 5',
     'Intermedio 1',
     'Intermedio 2',
     'Intermedio 3',
+    'Intermedio 4',
+    'Intermedio 5',
     'Avanzado 1',
     'Avanzado 2',
     'Avanzado 3',
@@ -42,11 +65,20 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
       tipoTramite == 'Examen de colocación';
 
   @override
+  void initState() {
+    super.initState();
+
+    // Recuperamos los datos enviados desde otra pantalla.
+    idiomaSeleccionado = widget.idiomaInicial;
+    nivelSeleccionado = widget.nivelInicial;
+    tipoTramite = widget.tipoTramiteInicial;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
 
-      // Barra superior.
       appBar: AppBar(
         title: const Text('Nueva solicitud'),
         backgroundColor: azulSolicitud,
@@ -60,7 +92,6 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
           child: ListView(
             padding: const EdgeInsets.all(22),
             children: [
-              // Encabezado.
               const Icon(
                 Icons.assignment_add,
                 size: 58,
@@ -103,7 +134,6 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
               const SizedBox(height: 9),
 
               DropdownButtonFormField<String>(
-                // Valor inicial del menú desplegable.
                 initialValue: tipoTramite,
                 isExpanded: true,
                 decoration: InputDecoration(
@@ -121,12 +151,16 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
                 hint: const Text('Selecciona un trámite'),
                 items: const [
                   DropdownMenuItem(
-                    value: 'Inscripción a curso',
-                    child: Text('Inscripción a curso'),
-                  ),
-                  DropdownMenuItem(
                     value: 'Examen de colocación',
                     child: Text('Examen de colocación'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Continuar al siguiente nivel',
+                    child: Text('Continuar al siguiente nivel'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Recursar nivel',
+                    child: Text('Recursar nivel'),
                   ),
                 ],
                 validator: (valor) {
@@ -139,8 +173,10 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
                   setState(() {
                     tipoTramite = valor;
 
-                    // Si cambia el trámite, reiniciamos el nivel.
-                    nivelSeleccionado = null;
+                    // El examen no requiere nivel seleccionado.
+                    if (esExamen) {
+                      nivelSeleccionado = null;
+                    }
                   });
                 },
               ),
@@ -156,7 +192,6 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
               const SizedBox(height: 9),
 
               DropdownButtonFormField<String>(
-                // Valor inicial del menú desplegable.
                 initialValue: idiomaSeleccionado,
                 isExpanded: true,
                 decoration: InputDecoration(
@@ -170,16 +205,12 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
                   ),
                 ),
                 hint: const Text('Selecciona un idioma'),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'Inglés',
-                    child: Text('Inglés'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'Francés',
-                    child: Text('Francés'),
-                  ),
-                ],
+                items: idiomas.map((idioma) {
+                  return DropdownMenuItem<String>(
+                    value: idioma,
+                    child: Text(idioma),
+                  );
+                }).toList(),
                 validator: (valor) {
                   if (valor == null) {
                     return 'Selecciona un idioma.';
@@ -195,17 +226,16 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
 
               const SizedBox(height: 22),
 
-              // El nivel solo se solicita para inscripción.
+              // El nivel se solicita para continuar o recursar.
               if (!esExamen) ...[
                 const Text(
-                  'Nivel al que deseas ingresar',
+                  'Nivel que deseas cursar',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
 
                 const SizedBox(height: 9),
 
                 DropdownButtonFormField<String>(
-                  // Valor inicial del menú desplegable.
                   initialValue: nivelSeleccionado,
                   isExpanded: true,
                   decoration: InputDecoration(
@@ -266,10 +296,17 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
                                 'determinar tu nivel. La fecha, el '
                                 'pago y la asignación se confirmarán '
                                 'según las indicaciones de CELEX.'
-                            : 'Enviar esta solicitud no garantiza '
-                                'que el grupo esté abierto. Espera '
-                                'la confirmación antes de realizar '
-                                'cualquier pago.',
+                            : tipoTramite == 'Recursar nivel'
+                                ? 'Esta solicitud permite pedir '
+                                    'la oportunidad de repetir el '
+                                    'nivel seleccionado. Espera la '
+                                    'confirmación de CELEX antes '
+                                    'de realizar cualquier pago.'
+                                : 'Esta solicitud permite continuar '
+                                    'con tu siguiente nivel. Espera '
+                                    'la confirmación de CELEX sobre '
+                                    'la apertura del grupo antes de '
+                                    'realizar cualquier pago.',
                         style: const TextStyle(
                           fontSize: 13,
                           height: 1.5,
@@ -325,14 +362,14 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
 
   // Valida los campos y muestra un resumen.
   void enviarSolicitud() {
-    // Si hay un campo obligatorio vacío, no continuamos.
     if (!formularioKey.currentState!.validate()) {
       return;
     }
 
     // En un examen todavía no se asigna un nivel.
-    final String nivelFinal =
-        esExamen ? 'Por determinar mediante examen' : nivelSeleccionado!;
+    final String nivelFinal = esExamen
+        ? 'Por determinar mediante examen'
+        : nivelSeleccionado!;
 
     // Mostramos una confirmación de prueba.
     showDialog(
@@ -361,7 +398,6 @@ class _NuevaSolicitudState extends State<NuevaSolicitud> {
             ),
             ElevatedButton(
               onPressed: () {
-                // Cerramos el aviso y regresamos al menú.
                 Navigator.pop(context);
                 Navigator.pop(context);
               },

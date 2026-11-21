@@ -1,9 +1,10 @@
-
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-// Importamos las pantallas a las que podremos navegar.
+// Importamos las pantallas correspondientes.
 import 'registro.dart';
 import 'inicio_estudiante.dart';
+import 'inicio_coordinador.dart';
 
 // Color institucional de CELEX Academy.
 const Color azulLogin = Color(0xFF023C87);
@@ -27,18 +28,116 @@ class _InicioSesionState extends State<InicioSesion> {
   // Indica si la contraseña se muestra o se oculta.
   bool mostrarContrasena = false;
 
+  // Indica si se está validando el inicio de sesión.
+  bool cargando = false;
+
   @override
   void dispose() {
-    // Liberamos los controladores al cerrar la pantalla.
     correoController.dispose();
     contrasenaController.dispose();
     super.dispose();
   }
 
+  // Función para iniciar sesión con Supabase.
+  Future<void> iniciarSesion() async {
+    final correo = correoController.text.trim();
+    final contrasena = contrasenaController.text;
+
+    // Comprobamos que los campos no estén vacíos.
+    if (correo.isEmpty || contrasena.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Completa el correo y la contraseña.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      cargando = true;
+    });
+
+    try {
+      final supabase = Supabase.instance.client;
+
+      // Validamos las credenciales del usuario.
+      final respuesta = await supabase.auth.signInWithPassword(
+        email: correo,
+        password: contrasena,
+      );
+
+      // Comprobamos que exista una sesión.
+      if (respuesta.session == null || respuesta.user == null) {
+        throw Exception('No se pudo obtener la sesión del usuario.');
+      }
+
+      final usuario = respuesta.user!;
+
+      // Consultamos el rol del usuario que inició sesión.
+      // La política RLS permite consultar únicamente su propio registro.
+      final registroRol = await supabase
+          .from('roles_usuarios')
+          .select('rol')
+          .eq('usuario_id', usuario.id)
+          .maybeSingle();
+
+      // Si tiene el rol coordinador, mostramos su panel.
+      // Si no tiene registro o es estudiante, mostramos su pantalla habitual.
+      final String rol = registroRol?['rol'] ?? 'estudiante';
+
+      if (!mounted) return;
+
+      if (rol == 'coordinador') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const InicioCoordinador(),
+          ),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const InicioEstudiante(),
+          ),
+        );
+      }
+    } on AuthException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'No se pudo iniciar sesión: ${error.message}',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      // Si falla la consulta del rol, cerramos la sesión para
+      // evitar dejar al usuario en un estado de acceso incierto.
+      await Supabase.instance.client.auth.signOut();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Ocurrió un error al identificar tu cuenta: $error',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          cargando = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Barra superior con botón para regresar.
       appBar: AppBar(
         title: const Text('Iniciar sesión'),
         backgroundColor: Colors.white,
@@ -54,7 +153,6 @@ class _InicioSesionState extends State<InicioSesion> {
             children: [
               const SizedBox(height: 24),
 
-              // Icono provisional de la institución.
               const Icon(
                 Icons.school_rounded,
                 color: azulLogin,
@@ -63,7 +161,6 @@ class _InicioSesionState extends State<InicioSesion> {
 
               const SizedBox(height: 20),
 
-              // Título de la pantalla.
               const Text(
                 '¡Qué gusto verte!',
                 textAlign: TextAlign.center,
@@ -87,7 +184,6 @@ class _InicioSesionState extends State<InicioSesion> {
 
               const SizedBox(height: 36),
 
-              // Etiqueta del campo de correo.
               const Text(
                 'Correo electrónico',
                 style: TextStyle(fontWeight: FontWeight.w600),
@@ -95,7 +191,6 @@ class _InicioSesionState extends State<InicioSesion> {
 
               const SizedBox(height: 8),
 
-              // Campo para escribir el correo.
               TextField(
                 controller: correoController,
                 keyboardType: TextInputType.emailAddress,
@@ -110,7 +205,6 @@ class _InicioSesionState extends State<InicioSesion> {
 
               const SizedBox(height: 20),
 
-              // Etiqueta del campo de contraseña.
               const Text(
                 'Contraseña',
                 style: TextStyle(fontWeight: FontWeight.w600),
@@ -118,18 +212,13 @@ class _InicioSesionState extends State<InicioSesion> {
 
               const SizedBox(height: 8),
 
-              // Campo para escribir la contraseña.
               TextField(
                 controller: contrasenaController,
-
-                // Si es false, la contraseña permanece oculta.
                 obscureText: !mostrarContrasena,
-
                 decoration: InputDecoration(
                   hintText: 'Escribe tu contraseña',
                   prefixIcon: const Icon(Icons.lock_outline),
 
-                  // Botón del ojo para mostrar u ocultar la contraseña.
                   suffixIcon: IconButton(
                     onPressed: () {
                       setState(() {
@@ -151,21 +240,10 @@ class _InicioSesionState extends State<InicioSesion> {
 
               const SizedBox(height: 30),
 
-              // Botón para entrar a la aplicación.
               SizedBox(
                 height: 54,
                 child: ElevatedButton(
-                  onPressed: () {
-                    // Por ahora no validamos el correo ni la contraseña.
-                    // Abrimos la pantalla principal como demostración.
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            const InicioEstudiante(),
-                      ),
-                    );
-                  },
+                  onPressed: cargando ? null : iniciarSesion,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: azulLogin,
                     foregroundColor: Colors.white,
@@ -173,29 +251,33 @@ class _InicioSesionState extends State<InicioSesion> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text(
-                    'Entrar',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  child: cargando
+                      ? const CircularProgressIndicator(
+                          color: Colors.white,
+                        )
+                      : const Text(
+                          'Entrar',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                 ),
               ),
 
               const SizedBox(height: 22),
 
-              // Enlace para quien todavía no tiene cuenta.
               TextButton(
-                onPressed: () {
-                  // Abrimos la pantalla de registro.
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const Registro(),
-                    ),
-                  );
-                },
+                onPressed: cargando
+                    ? null
+                    : () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const Registro(),
+                          ),
+                        );
+                      },
                 child: const Text(
                   '¿No tienes cuenta? Regístrate',
                   style: TextStyle(color: azulLogin),
